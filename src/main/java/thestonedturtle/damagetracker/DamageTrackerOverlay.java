@@ -38,6 +38,7 @@ import net.runelite.client.ui.overlay.components.LayoutableRenderableEntity;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.PanelComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
+import thestonedturtle.damagetracker.npcstats.performances.Performance;
 
 public class DamageTrackerOverlay extends Overlay
 {
@@ -70,7 +71,7 @@ public class DamageTrackerOverlay extends Overlay
 	public Dimension render(Graphics2D graphics)
 	{
 		final Performance current = tracker.getPerformance();
-		if (!tracker.isTracking() || current == null)
+		if (current == null || !current.isEnabled())
 		{
 			return null;
 		}
@@ -84,7 +85,7 @@ public class DamageTrackerOverlay extends Overlay
 		add(LineComponent.builder().left("Dmg Taken").right(String.valueOf((int) Math.round(current.getDamageTaken()))).build());
 		add(LineComponent.builder().left("Time Spent").right(current.getReadableSecondsSpent()).build());
 		add(LineComponent.builder().left("DPS").right(String.valueOf(current.getDPS())).build());
-		if (tracker.isPaused())
+		if (current.isPaused())
 		{
 			add(TitleComponent.builder().text("Paused").build());
 			panelComponent.setBackgroundColor(PAUSED_COLOR);

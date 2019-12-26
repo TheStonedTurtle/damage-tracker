@@ -22,59 +22,89 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package thestonedturtle.damagetracker;
+package thestonedturtle.damagetracker.npcstats.performances;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
-@Data
-public class Performance
+@Getter
+public class BasicPerformance implements Performance
 {
 	private double damageTaken = 0;
 	private double highestHitTaken = 0;
 	private double damageDealt = 0;
 	private double highestHitDealt = 0;
-	private double secondsSpent = 0;
-	private boolean started = false;
+	private boolean paused = false;
+	private boolean enabled = false;
 
-	void addDamageTaken(double a)
+	@Setter
+	int lastActivityTick = -1;
+	private int ticksSpent = 0;
+
+	@Override
+	public void addDamageTaken(double a)
 	{
-		this.damageTaken += a;
+		damageTaken += a;
 		if (a > highestHitTaken)
 		{
 			highestHitTaken = a;
 		}
 	}
 
-	void addDamageDealt(double a)
+	@Override
+	public void addDamageDealt(double a)
 	{
-		this.damageDealt += a;
+		damageDealt += a;
 		if (a > highestHitDealt)
 		{
 			highestHitDealt = a;
 		}
 	}
 
-	void incrementSeconds()
+	@Override
+	public void incrementTicksSpent()
 	{
-		this.secondsSpent++;
+		ticksSpent++;
 	}
 
-	double getDPS()
+	@Override
+	public int getTicksSpent()
 	{
-		return Math.round((this.damageDealt / this.secondsSpent) * 100) / 100.00;
+		return ticksSpent;
 	}
 
-	String getReadableSecondsSpent()
+	@Override
+	public void pause()
 	{
-		if (secondsSpent <= 60)
-		{
-			return String.format("%2.0f", secondsSpent) + "s";
-		}
+		paused = true;
+	}
 
-		final double s = secondsSpent % 3600 % 60;
-		final double m = Math.floor(secondsSpent % 3600 / 60);
-		final double h = Math.floor(secondsSpent / 3600);
+	@Override
+	public void unpause()
+	{
+		paused = false;
+	}
 
-		return h < 1 ? String.format("%2.0f:%02.0f", m, s) : String.format("%2.0f:%02.0f:%02.0f", h, m, s);
+	@Override
+	public void enable()
+	{
+		enabled = true;
+	}
+
+	@Override
+	public void disable()
+	{
+		enabled = false;
+	}
+
+	@Override
+	public void reset()
+	{
+		damageDealt = 0;
+		highestHitDealt = 0;
+		damageTaken = 0;
+		highestHitTaken = 0;
+		lastActivityTick = -1;
+		ticksSpent = 0;
 	}
 }

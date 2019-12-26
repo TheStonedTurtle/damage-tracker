@@ -6,13 +6,12 @@ import com.google.inject.Provides;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Type;
-import java.text.DecimalFormat;
-import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Actor;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
 import net.runelite.api.Hitsplat;
 import net.runelite.api.NPC;
@@ -20,20 +19,22 @@ import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.WorldType;
 import net.runelite.api.events.FakeXpDrop;
+import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
 import net.runelite.api.events.StatChanged;
-import net.runelite.client.chat.ChatColorType;
-import net.runelite.client.chat.ChatMessageBuilder;
+import net.runelite.client.chat.ChatMessageManager;
+import net.runelite.client.chat.QueuedMessage;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.OverlayMenuClicked;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.task.Schedule;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.http.api.RuneLiteAPI;
 import thestonedturtle.damagetracker.npcstats.NpcStats;
+import thestonedturtle.damagetracker.npcstats.performances.BasicPerformance;
+import thestonedturtle.damagetracker.npcstats.performances.Performance;
 
 @Slf4j
 @PluginDescriptor(
@@ -41,7 +42,6 @@ import thestonedturtle.damagetracker.npcstats.NpcStats;
 )
 public class DamageTrackerPlugin extends Plugin
 {
-	private static final DecimalFormat NUMBER_FORMAT = new DecimalFormat("#,###");
 	private static final double HITPOINT_RATIO = 1.33; // Default ratio is 1 dmg dealt = 1.33 hitpoints exp
 	private static final double DMM_MULTIPLIER_RATIO = 10;
 
@@ -58,6 +58,9 @@ public class DamageTrackerPlugin extends Plugin
 	private Client client;
 
 	@Inject
+	private ChatMessageManager chatMessageManager;
+
+	@Inject
 	private DamageTrackerConfig config;
 
 	@Inject
@@ -67,14 +70,9 @@ public class DamageTrackerPlugin extends Plugin
 	private OverlayManager overlayManager;
 
 	@Getter
-	private boolean tracking = false;
-	@Getter
-	private boolean paused = false;
-	@Getter
-	private Performance performance = new Performance();
+	private Performance performance = new BasicPerformance();
 
 	private Actor oldTarget;
-	private boolean loginTick = false;
 	private double hpExp = 0;
 
 	@Provides
@@ -106,27 +104,17 @@ public class DamageTrackerPlugin extends Plugin
 		switch (c.getEntry().getOption().toLowerCase())
 		{
 			case "pause":
+				performance.togglePause();
+				break;
 			case "reset":
-		}
-	}
-
-	@Schedule(
-		period = 1,
-		unit = ChronoUnit.SECONDS
-	)
-	public void secondTick()
-	{
-		if (tracking)
-		{
-			performance.incrementSeconds();
+				performance.reset();
+				break;
 		}
 	}
 
 	@Subscribe
 	public void onGameTick(final GameTick tick)
 	{
-		loginTick = false;
-
 		final Player local = client.getLocalPlayer();
 		if (local == null)
 		{
@@ -136,12 +124,31 @@ public class DamageTrackerPlugin extends Plugin
 		{
 			oldTarget = local.getInteracting();
 		}
+
+		if (performance.isTracking())
+		{
+			performance.incrementTicksSpent();
+		}
+	}
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged event)
+	{
+		switch (event.getGameState())
+		{
+			case LOGIN_SCREEN:
+				performance.disable();
+				performance.reset();
+				break;
+		}
 	}
 
 	@Subscribe
 	protected void onHitsplatApplied(final HitsplatApplied e)
 	{
-		if (!tracking || !e.getActor().equals(client.getLocalPlayer()) || e.getHitsplat().getHitsplatType().equals(Hitsplat.HitsplatType.HEAL))
+		if (!performance.isTracking()
+			|| e.getHitsplat().getHitsplatType().equals(Hitsplat.HitsplatType.HEAL)
+			|| !e.getActor().equals(client.getLocalPlayer()))
 		{
 			return;
 		}
@@ -152,8 +159,21 @@ public class DamageTrackerPlugin extends Plugin
 	@Subscribe
 	protected void onStatChanged(final StatChanged event)
 	{
-		if (!tracking || loginTick || !event.getSkill().equals(Skill.HITPOINTS))
+		if (!event.getSkill().equals(Skill.HITPOINTS))
 		{
+			return;
+		}
+
+		// Ignore initial login
+		if (client.getTickCount() < 2)
+		{
+			return;
+		}
+
+		// Track HP exp regardless of if enabled so first hit calculation is accurate
+		if (!performance.isEnabled() || performance.isPaused() || hpExp <= 0)
+		{
+			hpExp = client.getSkillExperience(Skill.HITPOINTS);
 			return;
 		}
 
@@ -173,7 +193,7 @@ public class DamageTrackerPlugin extends Plugin
 	@Subscribe
 	public void onFakeXpDrop(final FakeXpDrop event)
 	{
-		if (!tracking || !event.getSkill().equals(Skill.HITPOINTS))
+		if (!performance.isTracking() || !event.getSkill().equals(Skill.HITPOINTS))
 		{
 			return;
 		}
@@ -222,36 +242,13 @@ public class DamageTrackerPlugin extends Plugin
 		return damageDealt / modifier;
 	}
 
-	// Generic chat message for all performances
-	private static String createPerformanceMessage(Performance a)
+	private void submit()
 	{
-		return new ChatMessageBuilder()
-			.append(ChatColorType.NORMAL)
-			.append("Damage dealt: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(NUMBER_FORMAT.format(a.getDamageDealt()))
-			.append(ChatColorType.NORMAL)
-			.append(" (Max: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(NUMBER_FORMAT.format(a.getHighestHitDealt()))
-			.append(ChatColorType.NORMAL)
-			.append("), Damage Taken: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(NUMBER_FORMAT.format(a.getDamageTaken()))
-			.append(ChatColorType.NORMAL)
-			.append(" (Max: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(NUMBER_FORMAT.format(a.getHighestHitTaken()))
-			.append(ChatColorType.NORMAL)
-			.append("), Time Spent: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(a.getReadableSecondsSpent())
-			.append(ChatColorType.NORMAL)
-			.append(" (DPS: ")
-			.append(ChatColorType.HIGHLIGHT)
-			.append(String.valueOf(a.getDPS()))
-			.append(ChatColorType.NORMAL)
-			.append(")")
-			.build();
+		chatMessageManager.queue(QueuedMessage.builder()
+			.type(ChatMessageType.GAMEMESSAGE)
+			.runeLiteFormattedMessage(performance.getChatMessage())
+			.build());
+
+		performance.onSubmit();
 	}
 }
