@@ -1,9 +1,10 @@
 language: java
-sudo: false
+os: linux
 dist: xenial
 cache:
   directories:
-    - $HOME/.m2
+    - $HOME/.gradle/caches/
+    - $HOME/.gradle/wrapper/
 jdk:
   - openjdk8
 branches:
@@ -11,5 +12,5 @@ branches:
     - master
     - stable
 install: true
-before-script: gradle check
-script: ./travis.sh
+before_script: gradle check
+script: gradle build
