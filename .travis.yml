@@ -1,0 +1,15 @@
+language: java
+sudo: false
+dist: xenial
+cache:
+  directories:
+    - $HOME/.m2
+jdk:
+  - openjdk8
+branches:
+  only:
+    - master
+    - stable
+install: true
+before-script: gradle check
+script: ./travis.sh

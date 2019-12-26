@@ -49,7 +49,9 @@ public class DamageTrackerPlugin extends Plugin
 	static
 	{
 		final InputStream data = DamageTrackerPlugin.class.getResourceAsStream("npc_stats.json");
-		final Type typeToken = new TypeToken<Map<Integer, NpcStats>>(){}.getType();
+		final Type typeToken = new TypeToken<Map<Integer, NpcStats>>()
+		{
+		} .getType();
 		final Map<Integer, NpcStats> x = RuneLiteAPI.GSON.fromJson(new InputStreamReader(data), typeToken);
 		statsMap = ImmutableMap.copyOf(x);
 	}
