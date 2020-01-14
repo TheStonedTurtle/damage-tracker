@@ -38,7 +38,7 @@ import net.runelite.client.ui.overlay.components.LayoutableRenderableEntity;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.PanelComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
-import thestonedturtle.damagetracker.npcstats.performances.Performance;
+import thestonedturtle.damagetracker.performances.PauseablePerformance;
 
 public class DamageTrackerOverlay extends Overlay
 {
@@ -70,8 +70,8 @@ public class DamageTrackerOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
-		final Performance current = tracker.getPerformance();
-		if (current == null || !current.isEnabled())
+		final PauseablePerformance current = tracker.getPerformance();
+		if (current == null)
 		{
 			return null;
 		}
@@ -81,11 +81,12 @@ public class DamageTrackerOverlay extends Overlay
 		panelComponent.setBackgroundColor(ComponentConstants.STANDARD_BACKGROUND_COLOR);
 
 		add(TitleComponent.builder().text("Damage Tracker").build());
-		add(LineComponent.builder().left("Dmg Dealt").right(String.valueOf((int) Math.round(current.getDamageDealt()))).build());
-		add(LineComponent.builder().left("Dmg Taken").right(String.valueOf((int) Math.round(current.getDamageTaken()))).build());
-		add(LineComponent.builder().left("Time Spent").right(current.getReadableSecondsSpent()).build());
-		add(LineComponent.builder().left("DPS").right(String.valueOf(current.getDPS())).build());
-		if (current.isPaused())
+		add(LineComponent.builder().left("Dmg Dealt").right(String.valueOf(current.getDamageDealt())).build());
+		add(LineComponent.builder().left("Dmg Taken").right(String.valueOf(current.getDamageTaken())).build());
+		add(LineComponent.builder().left("Time Spent").right(current.getReadableSecondsElapsed()).build());
+		final double dps = Math.round(current.getDealtDps() * 100) / 100.00;
+		add(LineComponent.builder().left("DPS").right(String.valueOf(dps)).build());
+		if (current.getEndTime() != null)
 		{
 			add(TitleComponent.builder().text("Paused").build());
 			panelComponent.setBackgroundColor(PAUSED_COLOR);
