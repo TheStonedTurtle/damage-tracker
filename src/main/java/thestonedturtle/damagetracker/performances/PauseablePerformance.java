@@ -35,12 +35,12 @@ public class PauseablePerformance extends BasicPerformance
 		return endTime == null;
 	}
 
-	void pause()
+	public void pause()
 	{
 		endTime = Instant.now();
 	}
 
-	void unpause()
+	public void unpause()
 	{
 		if (endTime == null)
 		{
@@ -49,5 +49,17 @@ public class PauseablePerformance extends BasicPerformance
 
 		startTime = startTime.plus(Duration.between(endTime, Instant.now()));
 		endTime = null;
+	}
+
+	public void togglePause()
+	{
+		if (endTime == null)
+		{
+			pause();
+		}
+		else
+		{
+			unpause();
+		}
 	}
 }
